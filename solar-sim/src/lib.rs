@@ -1,11 +1,17 @@
+use std::sync::Arc;
+
+use specs::{DispatcherBuilder, World, WorldExt};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::event::*;
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
-use crate::render::State;
+use crate::control::Controls;
+use crate::render::camera::ControlCamera;
+use crate::render::Render;
 
+pub mod control;
 pub mod render;
 mod texture;
 
@@ -42,56 +48,56 @@ pub async fn run() {
             .expect("Couldn't append canvas to document body.");
     }
 
-    // State::new uses async code, so we're going to wait for it to finish
-    let mut state = State::new(window).await;
+    let window = Arc::new(window);
+    let state = Render::new(Arc::clone(&window)).await;
+
+    let mut world = World::new();
+    let mut dispatcher = DispatcherBuilder::new()
+        .with(ControlCamera::default(), "camera", &[])
+        .with_thread_local(state)
+        .build();
+    dispatcher.setup(&mut world);
 
     event_loop.run(move |event, _, control_flow| {
+        control_flow.set_poll();
+
         match event {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == state.window().id() => {
-                if !state.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested
-                        | WindowEvent::KeyboardInput {
-                            input:
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                                    ..
-                                },
-                            ..
-                        } => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(physical_size) => {
-                            state.resize(*physical_size);
-                        }
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            // new_inner_size is &mut so w have to dereference it twice
-                            state.resize(**new_inner_size);
-                        }
-                        _ => {}
+            } if window_id == window.id() => {
+                match event {
+                    WindowEvent::CloseRequested
+                    | WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                ..
+                            },
+                        ..
+                    } => control_flow.set_exit(),
+                    WindowEvent::Resized(physical_size) => {
+                        // TODO: state.resize(*physical_size);
                     }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        // new_inner_size is &mut so w have to dereference it twice
+                        // TODO: state.resize(**new_inner_size);
+                    }
+                    WindowEvent::KeyboardInput { input, .. } => {
+                        world.fetch_mut::<Controls>().process_keyboard(input);
+                    }
+                    _ => { /*TODO*/ }
                 }
             }
-            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
-                state.update();
-                match state.render() {
-                    Ok(_) => {}
-                    // Reconfigure the surface if it's lost or outdated
-                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                        state.resize(state.size)
-                    }
-                    // The system is out of memory, we should probably quit
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // We're ignoring timeouts
-                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-                }
+            Event::RedrawRequested(window_id) if window_id == window.id() => {
+                dispatcher.dispatch(&world);
+                world.maintain();
             }
             Event::MainEventsCleared => {
                 // RedrawRequested will only trigger once, unless we manually
                 // request it.
-                state.window().request_redraw();
+                window.request_redraw();
             }
             _ => {}
         }

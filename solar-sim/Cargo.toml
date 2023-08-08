@@ -8,6 +8,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+specs = "0.19"
 cfg-if = "1"
 anyhow = "1.0"
 bytemuck = { version = "1.12", features = [ "derive" ] }

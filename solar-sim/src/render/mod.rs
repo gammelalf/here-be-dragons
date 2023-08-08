@@ -1,11 +1,16 @@
 pub mod camera;
 pub mod instance;
 
+use std::mem::size_of;
+use std::sync::Arc;
+
+use cgmath::{Matrix4, SquareMatrix};
+use specs::{RunNow, World};
 use wgpu::util::DeviceExt;
-use winit::event::WindowEvent;
+use wgpu::vertex_attr_array;
 use winit::window::Window;
 
-use crate::render::camera::{Camera, CameraController, CameraUniform};
+use crate::render::camera::{Camera, OPENGL_TO_WGPU_MATRIX};
 use crate::render::instance::{Instance, InstanceRaw};
 use crate::texture;
 
@@ -14,28 +19,6 @@ use crate::texture;
 struct Vertex {
     position: [f32; 3],
     tex_coords: [f32; 2],
-}
-
-impl Vertex {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
 }
 
 const VERTICES: &[Vertex] = &[
@@ -70,7 +53,7 @@ const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
     NUM_INSTANCES_PER_ROW as f32 * 0.5,
 );
 
-pub struct State {
+pub struct Render {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -83,9 +66,6 @@ pub struct State {
     #[allow(dead_code)]
     diffuse_texture: texture::Texture,
     diffuse_bind_group: wgpu::BindGroup,
-    camera: Camera,
-    camera_controller: CameraController,
-    camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     instances: Vec<Instance>,
@@ -93,11 +73,27 @@ pub struct State {
     instance_buffer: wgpu::Buffer,
     // NEW!
     depth_texture: texture::Texture,
-    window: Window,
+    window: Arc<Window>,
 }
 
-impl State {
-    pub async fn new(window: Window) -> Self {
+impl<'a> RunNow<'a> for Render {
+    fn run_now(&mut self, world: &'a World) {
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[world.fetch::<Camera>().build_view_projection_matrix()]),
+        );
+        self.render().unwrap();
+    }
+
+    fn setup(&mut self, world: &mut World) {
+        let camera = Camera::new(self.config.width as f32 / self.config.height as f32);
+        world.insert(camera);
+    }
+}
+
+impl Render {
+    pub async fn new(window: Arc<Window>) -> Self {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -111,7 +107,7 @@ impl State {
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        let surface = unsafe { instance.create_surface(window.as_ref()) }.unwrap();
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -202,23 +198,11 @@ impl State {
             label: Some("diffuse_bind_group"),
         });
 
-        let camera = Camera {
-            eye: (0.0, 5.0, 10.0).into(),
-            target: (0.0, 0.0, 0.0).into(),
-            up: cgmath::Vector3::unit_y(),
-            aspect: config.width as f32 / config.height as f32,
-            fovy: 45.0,
-            znear: 0.1,
-            zfar: 100.0,
-        };
-        let camera_controller = CameraController::new(0.2);
-
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
-
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[camera_uniform]),
+            contents: bytemuck::cast_slice(&[<Matrix4<f32> as Into<[[f32; 4]; 4]>>::into(
+                OPENGL_TO_WGPU_MATRIX * Matrix4::identity(),
+            )]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -275,7 +259,14 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[Vertex::desc(), InstanceRaw::desc()],
+                buffers: &[
+                    wgpu::VertexBufferLayout {
+                        array_stride: size_of::<Vertex>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &vertex_attr_array![0 => Float32x3, 1 => Float32x2],
+                    },
+                    InstanceRaw::desc(),
+                ],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -343,11 +334,9 @@ impl State {
             num_indices,
             diffuse_texture,
             diffuse_bind_group,
-            camera,
-            camera_controller,
+
             camera_buffer,
             camera_bind_group,
-            camera_uniform,
             instances,
             instance_buffer,
             depth_texture,
@@ -365,25 +354,11 @@ impl State {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-            self.camera.aspect = self.config.width as f32 / self.config.height as f32;
+            // TODO: self.camera.aspect = self.config.width as f32 / self.config.height as f32;
             // NEW!
             self.depth_texture =
                 texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
         }
-    }
-
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event)
-    }
-
-    pub fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera);
-        self.queue.write_buffer(
-            &self.camera_buffer,
-            0,
-            bytemuck::cast_slice(&[self.camera_uniform]),
-        );
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
