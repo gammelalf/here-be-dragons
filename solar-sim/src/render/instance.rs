@@ -1,8 +1,8 @@
-use cgmath::{InnerSpace, Rotation3, Vector3, Zero};
+use cgmath::{InnerSpace, Quaternion, Rotation3, Vector3, Zero};
 
 pub struct Instance {
-    pub position: cgmath::Vector3<f32>,
-    pub rotation: cgmath::Quaternion<f32>,
+    pub position: Vector3<f32>,
+    pub rotation: Quaternion<f32>,
 }
 
 impl Instance {
@@ -19,12 +19,9 @@ impl Instance {
                     let rotation = if position.is_zero() {
                         // this is needed so an object at (0, 0, 0) won't get scaled to zero
                         // as Quaternions can effect scale if they're not created correctly
-                        cgmath::Quaternion::from_axis_angle(
-                            cgmath::Vector3::unit_z(),
-                            cgmath::Deg(0.0),
-                        )
+                        Quaternion::from_axis_angle(Vector3::unit_z(), cgmath::Deg(0.0))
                     } else {
-                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                        Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
                     };
 
                     Self { position, rotation }
