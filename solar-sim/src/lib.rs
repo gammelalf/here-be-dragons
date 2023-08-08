@@ -10,10 +10,12 @@ use winit::window::WindowBuilder;
 use crate::control::Controls;
 use crate::render::camera::ControlCamera;
 use crate::render::Render;
+use crate::timer::Timer;
 
 pub mod control;
 pub mod render;
-mod texture;
+pub mod texture;
+pub mod timer;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
@@ -53,7 +55,8 @@ pub async fn run() {
 
     let mut world = World::new();
     let mut dispatcher = DispatcherBuilder::new()
-        .with(ControlCamera::default(), "camera", &[])
+        .with(Timer::default(), "timer", &[])
+        .with(ControlCamera::default(), "camera", &["timer"])
         .with_thread_local(state)
         .build();
     dispatcher.setup(&mut world);

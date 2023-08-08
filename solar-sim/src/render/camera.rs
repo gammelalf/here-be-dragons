@@ -3,6 +3,7 @@ use specs::shred::PanicHandler;
 use specs::{Read, System, Write};
 
 use crate::control::Controls;
+use crate::timer::Delta;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Camera {
@@ -42,25 +43,31 @@ pub struct ControlCamera {
 
 impl Default for ControlCamera {
     fn default() -> Self {
-        Self { speed: 1.0 }
+        Self { speed: 10.0 }
     }
 }
 
 impl<'a> System<'a> for ControlCamera {
-    type SystemData = (Read<'a, Controls>, Write<'a, Camera, PanicHandler>);
+    type SystemData = (
+        Read<'a, Delta>,
+        Read<'a, Controls>,
+        Write<'a, Camera, PanicHandler>,
+    );
 
-    fn run(&mut self, (controls, mut camera): Self::SystemData) {
+    fn run(&mut self, (delta, controls, mut camera): Self::SystemData) {
+        let speed = delta.as_secs_f32() * self.speed;
+
         let forward = camera.target - camera.eye;
         let forward_norm = forward.normalize();
         let forward_mag = forward.magnitude();
 
         // Prevents glitching when camera gets too close to the
         // center of the scene.
-        if controls.is_forward_pressed && forward_mag > self.speed {
-            camera.eye += forward_norm * self.speed;
+        if controls.is_forward_pressed && forward_mag > speed {
+            camera.eye += forward_norm * speed;
         }
         if controls.is_backward_pressed {
-            camera.eye -= forward_norm * self.speed;
+            camera.eye -= forward_norm * speed;
         }
 
         let right = forward_norm.cross(camera.up);
@@ -73,10 +80,10 @@ impl<'a> System<'a> for ControlCamera {
             // Rescale the distance between the target and eye so
             // that it doesn't change. The eye therefore still
             // lies on the circle made by the target and eye.
-            camera.eye = camera.target - (forward + right * self.speed).normalize() * forward_mag;
+            camera.eye = camera.target - (forward + right * speed).normalize() * forward_mag;
         }
         if controls.is_left_pressed {
-            camera.eye = camera.target - (forward - right * self.speed).normalize() * forward_mag;
+            camera.eye = camera.target - (forward - right * speed).normalize() * forward_mag;
         }
     }
 }
