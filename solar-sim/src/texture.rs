@@ -1,5 +1,6 @@
-use anyhow::*;
 use image::GenericImageView;
+
+use crate::error::DynError;
 
 pub struct Texture {
     pub texture: wgpu::Texture,
@@ -99,7 +100,7 @@ impl Texture {
         queue: &wgpu::Queue,
         bytes: &[u8],
         label: &str,
-    ) -> Result<Self> {
+    ) -> Result<Self, DynError> {
         let img = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label))
     }
@@ -109,7 +110,7 @@ impl Texture {
         queue: &wgpu::Queue,
         img: &image::DynamicImage,
         label: Option<&str>,
-    ) -> Result<Self> {
+    ) -> Result<Self, DynError> {
         let rgba = img.to_rgba8();
         let dimensions = img.dimensions();
 

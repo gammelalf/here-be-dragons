@@ -8,17 +8,19 @@ use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
 use crate::control::Controls;
+use crate::error::DynError;
 use crate::render::camera::ControlCamera;
 use crate::render::Render;
 use crate::timer::Timer;
 
 pub mod control;
+pub mod error;
 pub mod render;
 pub mod texture;
 pub mod timer;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
-pub async fn run() {
+pub async fn run() -> Result<(), DynError> {
     cfg_if::cfg_if! {
         if #[cfg(target_arch = "wasm32")] {
             std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -51,7 +53,7 @@ pub async fn run() {
     }
 
     let window = Arc::new(window);
-    let state = Render::new(Arc::clone(&window)).await;
+    let state = Render::new(Arc::clone(&window)).await?;
 
     let mut world = World::new();
     let mut dispatcher = DispatcherBuilder::new()

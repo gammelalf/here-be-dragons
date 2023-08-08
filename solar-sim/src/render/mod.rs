@@ -17,6 +17,7 @@ use wgpu::{
 };
 use winit::window::Window;
 
+use crate::error::{CustomError, DynError};
 use crate::render::camera::{Camera, OPENGL_TO_WGPU_MATRIX};
 use crate::render::instance::{Instance, InstanceRaw};
 use crate::texture;
@@ -101,7 +102,7 @@ impl<'a> RunNow<'a> for Render {
 }
 
 impl Render {
-    pub async fn new(window: Arc<Window>) -> Self {
+    pub async fn new(window: Arc<Window>) -> Result<Self, DynError> {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(Default::default());
@@ -110,7 +111,7 @@ impl Render {
         //
         // The surface needs to live as long as the window that created it.
         // State owns the arced window so this should be safe.
-        let surface = unsafe { instance.create_surface(window.as_ref()) }.unwrap();
+        let surface = unsafe { instance.create_surface(window.as_ref()) }?;
 
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
@@ -119,7 +120,7 @@ impl Render {
                 force_fallback_adapter: false,
             })
             .await
-            .unwrap();
+            .ok_or(CustomError::from("Failed to request adapter"))?;
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
@@ -135,8 +136,7 @@ impl Render {
                 },
                 None,
             )
-            .await
-            .unwrap();
+            .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
         // Shader code in this tutorial assumes an Srgb surface texture. Using a different
@@ -161,7 +161,7 @@ impl Render {
 
         let diffuse_bytes = include_bytes!("../happy-tree.png");
         let diffuse_texture =
-            Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
+            Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png")?;
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -305,7 +305,7 @@ impl Render {
         });
         let num_indices = INDICES.len() as u32;
 
-        Self {
+        Ok(Self {
             surface,
             device,
             queue,
@@ -324,7 +324,7 @@ impl Render {
             instance_buffer,
             depth_texture,
             window,
-        }
+        })
     }
 
     pub fn window(&self) -> &Window {
