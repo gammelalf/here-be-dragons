@@ -6,19 +6,20 @@ use std::mem::size_of;
 use std::sync::Arc;
 
 use cgmath::{Matrix4, SquareMatrix};
-use specs::{Read, RunNow, SystemData, World};
+use specs::{Join, Read, ReadStorage, RunNow, SystemData, World};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     vertex_attr_array, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingResource, BindingType, BlendState, BufferAddress,
     BufferBindingType, BufferUsages, Color, ColorTargetState, CompareFunction, DepthStencilState,
     DeviceDescriptor, Features, FragmentState, Limits, PipelineLayoutDescriptor, PrimitiveState,
-    RenderPipelineDescriptor, RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource,
-    ShaderStages, SurfaceConfiguration, TextureUsages, VertexState, VertexStepMode,
+    PrimitiveTopology, RenderPipelineDescriptor, RequestAdapterOptions, ShaderModuleDescriptor,
+    ShaderSource, ShaderStages, SurfaceConfiguration, TextureUsages, VertexState, VertexStepMode,
 };
 use winit::window::Window;
 
 use crate::error::{CustomError, DynError};
+use crate::physics::{Planet, Position};
 use crate::render::camera::{Camera, Projection, OPENGL_TO_WGPU_MATRIX};
 use crate::render::instance::{Instance, InstanceRaw};
 use crate::render::shapes::octahedron;
@@ -50,7 +51,7 @@ pub struct Render {
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     #[allow(dead_code)]
-    diffuse_texture: texture::Texture,
+    diffuse_texture: Texture,
     diffuse_bind_group: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
@@ -59,12 +60,35 @@ pub struct Render {
     #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
     // NEW!
-    depth_texture: texture::Texture,
+    depth_texture: Texture,
     window: Arc<Window>,
 }
 
 impl<'a> RunNow<'a> for Render {
     fn run_now(&mut self, world: &'a World) {
+        let planets = ReadStorage::<'a, Planet>::fetch(world);
+        let positions = ReadStorage::<'a, Position>::fetch(world);
+        let instances: Vec<_> = (&planets, &positions)
+            .join()
+            .map(|(_, pos)| Instance::from_position(pos.0))
+            .collect();
+        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+
+        if self.instances.len() != instances.len() {
+            self.instances = instances;
+            self.instance_buffer = self.device.create_buffer_init(&BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            });
+        } else {
+            self.queue.write_buffer(
+                &self.instance_buffer,
+                0,
+                bytemuck::cast_slice(instance_data.as_slice()),
+            );
+        }
+
         let matrix: [[f32; 4]; 4] = (OPENGL_TO_WGPU_MATRIX
             * self.camera_config.matrix()
             * world.fetch::<Camera>().matrix())
@@ -80,6 +104,8 @@ impl<'a> RunNow<'a> for Render {
 
     fn setup(&mut self, world: &mut World) {
         <Read<'a, Camera> as SystemData>::setup(world);
+        <ReadStorage<'static, Planet> as SystemData>::setup(world);
+        <ReadStorage<'static, Position> as SystemData>::setup(world);
     }
 }
 
@@ -197,7 +223,7 @@ impl Render {
         let instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Instance Buffer"),
             contents: bytemuck::cast_slice(&instance_data),
-            usage: BufferUsages::VERTEX,
+            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
         });
 
         let camera_bind_group_layout =
@@ -265,6 +291,7 @@ impl Render {
             }),
             primitive: PrimitiveState {
                 cull_mode: None, // Some(wgpu::Face::Back),
+                topology: PrimitiveTopology::LineStrip,
                 ..Default::default()
             },
             depth_stencil: Some(DepthStencilState {
@@ -360,11 +387,11 @@ impl Render {
                 }),
             });
 
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as u32);
         }

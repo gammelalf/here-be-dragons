@@ -1,5 +1,6 @@
-use cgmath::{InnerSpace, One, Quaternion, Rotation3, Vector3, Zero};
+use cgmath::{EuclideanSpace, InnerSpace, One, Point3, Quaternion, Rotation3, Vector3, Zero};
 
+#[derive(Debug)]
 pub struct Instance {
     pub position: Vector3<f32>,
     pub rotation: Quaternion<f32>,
@@ -15,6 +16,13 @@ impl Default for Instance {
 }
 
 impl Instance {
+    pub fn from_position(position: Point3<f32>) -> Self {
+        Self {
+            position: position - Point3::origin(),
+            rotation: Quaternion::one(),
+        }
+    }
+
     pub fn generate(instance_per_row: usize, instance_displacement: Vector3<f32>) -> Vec<Self> {
         (0..instance_per_row)
             .flat_map(|z| {
