@@ -5,7 +5,7 @@ use std::mem::size_of;
 use std::sync::Arc;
 
 use cgmath::{Matrix4, SquareMatrix};
-use specs::{RunNow, World};
+use specs::{Read, RunNow, SystemData, World};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     vertex_attr_array, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
@@ -18,7 +18,7 @@ use wgpu::{
 use winit::window::Window;
 
 use crate::error::{CustomError, DynError};
-use crate::render::camera::{Camera, OPENGL_TO_WGPU_MATRIX};
+use crate::render::camera::{Camera, Projection, OPENGL_TO_WGPU_MATRIX};
 use crate::render::instance::{Instance, InstanceRaw};
 use crate::texture;
 use crate::texture::Texture;
@@ -77,6 +77,7 @@ pub struct Render {
     diffuse_bind_group: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    camera_config: Projection,
     instances: Vec<Instance>,
     #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
@@ -87,11 +88,12 @@ pub struct Render {
 
 impl<'a> RunNow<'a> for Render {
     fn run_now(&mut self, world: &'a World) {
-        self.queue.write_buffer(
-            &self.camera_buffer,
-            0,
-            bytemuck::cast_slice(&[world.fetch::<Camera>().build_view_projection_matrix()]),
-        );
+        let matrix: [[f32; 4]; 4] = (OPENGL_TO_WGPU_MATRIX
+            * self.camera_config.matrix()
+            * world.fetch::<Camera>().matrix())
+        .into();
+        self.queue
+            .write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[matrix]));
 
         match self.render() {
             Ok(_) => {}
@@ -100,8 +102,7 @@ impl<'a> RunNow<'a> for Render {
     }
 
     fn setup(&mut self, world: &mut World) {
-        let camera = Camera::new(self.config.width as f32 / self.config.height as f32);
-        world.insert(camera);
+        <Read<'a, Camera> as SystemData>::setup(world);
     }
 }
 
@@ -245,6 +246,8 @@ impl Render {
             label: Some("camera_bind_group"),
         });
 
+        let camera_config = Projection::new(config.width, config.height);
+
         let shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Shader"),
             source: ShaderSource::Wgsl(include_str!("../shader.wgsl").into()),
@@ -324,6 +327,7 @@ impl Render {
 
             camera_buffer,
             camera_bind_group,
+            camera_config,
             instances,
             instance_buffer,
             depth_texture,

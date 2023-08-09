@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
+use log::warn;
 use specs::{DispatcherBuilder, World, WorldExt};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::event::*;
 use winit::event_loop::EventLoop;
-use winit::window::WindowBuilder;
+use winit::window::{CursorGrabMode, WindowBuilder};
 
 use crate::control::Controls;
 use crate::error::DynError;
@@ -43,6 +44,10 @@ pub async fn run() -> Result<(), DynError> {
     }
 
     let window = Arc::new(window);
+    if let Err(error) = window.set_cursor_grab(CursorGrabMode::Confined) {
+        warn!("Failed to grab cursor: {error}")
+    }
+    window.set_cursor_visible(false);
     let state = Render::new(Arc::clone(&window)).await?;
 
     let mut world = World::new();
@@ -62,6 +67,7 @@ pub async fn run() -> Result<(), DynError> {
                 window_id,
             } if window_id == window.id() => {
                 match event {
+                    #[cfg(not(target_arch = "wasm32"))]
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
                         input:
@@ -85,6 +91,14 @@ pub async fn run() -> Result<(), DynError> {
                     _ => { /*TODO*/ }
                 }
             }
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta },
+                ..
+            } => world.fetch_mut::<Controls>().process_mouse(delta),
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseWheel { delta },
+                ..
+            } => world.fetch_mut::<Controls>().process_wheel(delta),
             Event::RedrawRequested(window_id) if window_id == window.id() => {
                 dispatcher.dispatch(&world);
                 world.maintain();
