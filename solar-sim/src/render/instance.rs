@@ -1,8 +1,17 @@
-use cgmath::{InnerSpace, Quaternion, Rotation3, Vector3, Zero};
+use cgmath::{InnerSpace, One, Quaternion, Rotation3, Vector3, Zero};
 
 pub struct Instance {
     pub position: Vector3<f32>,
     pub rotation: Quaternion<f32>,
+}
+
+impl Default for Instance {
+    fn default() -> Self {
+        Self {
+            position: Vector3::zero(),
+            rotation: Quaternion::one(),
+        }
+    }
 }
 
 impl Instance {

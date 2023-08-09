@@ -1,5 +1,6 @@
 pub mod camera;
 pub mod instance;
+pub mod shapes;
 
 use std::mem::size_of;
 use std::sync::Arc;
@@ -20,40 +21,16 @@ use winit::window::Window;
 use crate::error::{CustomError, DynError};
 use crate::render::camera::{Camera, Projection, OPENGL_TO_WGPU_MATRIX};
 use crate::render::instance::{Instance, InstanceRaw};
+use crate::render::shapes::octahedron;
 use crate::texture;
 use crate::texture::Texture;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    tex_coords: [f32; 2],
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
 }
-
-const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.0868241, 0.49240386, 0.0],
-        tex_coords: [0.4131759, 0.00759614],
-    }, // A
-    Vertex {
-        position: [-0.49513406, 0.06958647, 0.0],
-        tex_coords: [0.0048659444, 0.43041354],
-    }, // B
-    Vertex {
-        position: [-0.21918549, -0.44939706, 0.0],
-        tex_coords: [0.28081453, 0.949397],
-    }, // C
-    Vertex {
-        position: [0.35966998, -0.3473291, 0.0],
-        tex_coords: [0.85967, 0.84732914],
-    }, // D
-    Vertex {
-        position: [0.44147372, 0.2347359, 0.0],
-        tex_coords: [0.9414737, 0.2652641],
-    }, // E
-];
-
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, /* padding */ 0];
 
 const NUM_INSTANCES_PER_ROW: usize = 10;
 const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
@@ -211,10 +188,11 @@ impl Render {
             contents: bytemuck::cast_slice(&[<Matrix4<f32> as Into<[[f32; 4]; 4]>>::into(
                 OPENGL_TO_WGPU_MATRIX * Matrix4::identity(),
             )]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        let instances = Instance::generate(NUM_INSTANCES_PER_ROW, INSTANCE_DISPLACEMENT);
+        // let instances = Instance::generate(NUM_INSTANCES_PER_ROW, INSTANCE_DISPLACEMENT);
+        let instances = vec![Instance::default()];
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Instance Buffer"),
@@ -300,17 +278,18 @@ impl Render {
             multiview: Default::default(),
         });
 
+        let (vertexes, indexes) = octahedron();
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
+            contents: bytemuck::cast_slice(vertexes.as_slice()),
             usage: BufferUsages::VERTEX,
         });
         let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
+            contents: bytemuck::cast_slice(indexes.as_slice()),
             usage: BufferUsages::INDEX,
         });
-        let num_indices = INDICES.len() as u32;
+        let num_indices = indexes.len() as u32;
 
         Ok(Self {
             surface,
