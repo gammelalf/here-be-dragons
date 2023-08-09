@@ -92,7 +92,11 @@ impl<'a> RunNow<'a> for Render {
             0,
             bytemuck::cast_slice(&[world.fetch::<Camera>().build_view_projection_matrix()]),
         );
-        self.render().unwrap();
+
+        match self.render() {
+            Ok(_) => {}
+            Err(error) => panic!("Unhandled surface error: {error:?}"),
+        }
     }
 
     fn setup(&mut self, world: &mut World) {
@@ -325,10 +329,6 @@ impl Render {
             depth_texture,
             window,
         })
-    }
-
-    pub fn window(&self) -> &Window {
-        &self.window
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {

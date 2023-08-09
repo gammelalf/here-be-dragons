@@ -19,17 +19,7 @@ pub mod render;
 pub mod texture;
 pub mod timer;
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() -> Result<(), DynError> {
-    cfg_if::cfg_if! {
-        if #[cfg(target_arch = "wasm32")] {
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init_with_level(log::Level::Warn).expect("Could't initialize logger");
-        } else {
-            env_logger::init();
-        }
-    }
-
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
@@ -107,4 +97,12 @@ pub async fn run() -> Result<(), DynError> {
             _ => {}
         }
     });
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(start)]
+pub async fn wasm_main() {
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    console_log::init_with_level(log::Level::Warn).expect("Could't initialize logger");
+    run().await.unwrap();
 }

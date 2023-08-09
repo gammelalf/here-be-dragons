@@ -1,7 +1,13 @@
 use std::ops::Deref;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use specs::{System, Write};
+
+#[rustfmt::skip]
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+#[cfg(target_arch = "wasm32")]
+use wasm_timer::Instant;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Delta(Duration);
