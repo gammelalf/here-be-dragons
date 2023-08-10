@@ -33,13 +33,6 @@ pub struct Vertex {
     pub tex_coords: [f32; 2],
 }
 
-const NUM_INSTANCES_PER_ROW: usize = 10;
-const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-    0.0,
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-);
-
 pub struct Render {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -70,7 +63,7 @@ impl<'a> RunNow<'a> for Render {
         let positions = ReadStorage::<'a, Position>::fetch(world);
         let instances: Vec<_> = (&planets, &positions)
             .join()
-            .map(|(_, pos)| Instance::from_position(pos.0))
+            .map(|(_, pos)| Instance::from_position(pos.0 / 1e10))
             .collect();
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
 

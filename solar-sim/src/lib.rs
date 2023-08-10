@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use cgmath::{EuclideanSpace, Point3, Vector3};
 use log::warn;
-use specs::{Builder, DispatcherBuilder, World, WorldExt};
+use specs::{DispatcherBuilder, World, WorldExt};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::event::*;
@@ -11,7 +10,8 @@ use winit::window::{CursorGrabMode, WindowBuilder};
 
 use crate::control::Controls;
 use crate::error::DynError;
-use crate::physics::{Acceleration, Mechanics, Planet, Position, Velocity};
+use crate::physics::planets::build_planets;
+use crate::physics::{Gravity, Mechanics};
 use crate::render::camera::ControlCamera;
 use crate::render::Render;
 use crate::timer::Timer;
@@ -26,6 +26,11 @@ pub mod timer;
 pub async fn run() -> Result<(), DynError> {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
+    if let Err(error) = window.set_cursor_grab(CursorGrabMode::Confined) {
+        warn!("Failed to grab cursor: {error}")
+    }
+    window.set_cursor_visible(false);
+    // window.set_maximized(true);
 
     #[cfg(target_arch = "wasm32")]
     {
@@ -47,35 +52,19 @@ pub async fn run() -> Result<(), DynError> {
     }
 
     let window = Arc::new(window);
-    if let Err(error) = window.set_cursor_grab(CursorGrabMode::Confined) {
-        warn!("Failed to grab cursor: {error}")
-    }
-    window.set_cursor_visible(false);
     let state = Render::new(Arc::clone(&window)).await?;
 
     let mut world = World::new();
     let mut dispatcher = DispatcherBuilder::new()
         .with(Timer::default(), "timer", &[])
-        .with(Mechanics, "mechanics", &["timer"])
+        .with(Gravity, "gravity", &[])
+        .with(Mechanics, "mechanics", &["timer", "gravity"])
         .with(ControlCamera::default(), "camera", &["timer"])
         .with_thread_local(state)
         .build();
     dispatcher.setup(&mut world);
 
-    world
-        .create_entity()
-        .with(Planet)
-        .with(Position(Point3::new(10.0, 0.0, 0.0)))
-        .with(Velocity::default())
-        .with(Acceleration(Vector3::new(-0.1, 0.0, 0.0)))
-        .build();
-    world
-        .create_entity()
-        .with(Planet)
-        .with(Position(Point3::new(-10.0, 0.0, 0.0)))
-        .with(Velocity::default())
-        .with(Acceleration(Vector3::new(0.1, 0.0, 0.0)))
-        .build();
+    build_planets(&mut world);
 
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
