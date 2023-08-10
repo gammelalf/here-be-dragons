@@ -20,7 +20,6 @@ pub mod control;
 pub mod error;
 pub mod physics;
 pub mod render;
-pub mod texture;
 pub mod timer;
 
 pub async fn run() -> Result<(), DynError> {

@@ -1,8 +1,11 @@
-use cgmath::{Point3, Vector3};
+//! Populate the world with our planets based on some data copied from wikipedia
+
+use cgmath::{Point3, Vector3, Zero};
 use specs::{Builder, World, WorldExt};
 
 use crate::physics::{Acceleration, Mass, Planet, Position, Velocity};
 
+/// Populate the world with our planets
 pub fn build_planets(world: &mut World) {
     world.register::<Mass>();
     for planet in &PLANETS[..] {
@@ -11,20 +14,14 @@ pub fn build_planets(world: &mut World) {
             .with(Planet)
             .with(Position(planet.position))
             .with(Velocity(planet.velocity))
-            .with(Acceleration::default())
+            .with(Acceleration(Vector3::zero()))
             .with(Mass(planet.mass))
             .build();
     }
 }
 
-pub struct PlanetData {
-    name: &'static str,
-    position: Point3<f32>,
-    velocity: Vector3<f32>,
-    mass: f32,
-}
-
-pub const PLANETS: [PlanetData; 9] = [
+/// Data of our planets copied from wikipedia
+const PLANETS: [PlanetData; 9] = [
     PlanetData {
         name: "sun",
         position: Point3::new(0.0, 0.0, 0.0),
@@ -80,3 +77,10 @@ pub const PLANETS: [PlanetData; 9] = [
         mass: 102.413e24,
     },
 ];
+
+struct PlanetData {
+    name: &'static str,
+    position: Point3<f32>,
+    velocity: Vector3<f32>,
+    mass: f32,
+}

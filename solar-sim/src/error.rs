@@ -1,9 +1,13 @@
+//! Simple error "handling" and a custom error type
+
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
+/// Type alias for `dyn Error` to unify different error types
 pub type DynError = Box<dyn Error>;
 
+/// Custom error consisting of just a message i.e. string
 #[derive(Debug)]
 pub struct CustomError(Cow<'static, str>);
 

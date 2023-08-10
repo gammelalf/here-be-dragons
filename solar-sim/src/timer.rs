@@ -1,3 +1,5 @@
+//! System and resource to track the time passed between dispatches
+
 use std::ops::Deref;
 use std::time::Duration;
 
@@ -9,6 +11,9 @@ use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 use wasm_timer::Instant;
 
+/// Resource of time passed since last dispatch
+///
+/// Updated by [`Timer`] system
 #[derive(Copy, Clone, Debug)]
 pub struct Delta(Duration);
 
@@ -26,6 +31,9 @@ impl Deref for Delta {
     }
 }
 
+/// System tracking time passed between dispatches
+///
+/// Updates [`Delta`] resource
 #[derive(Copy, Clone, Debug)]
 pub struct Timer(Instant);
 

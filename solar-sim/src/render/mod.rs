@@ -1,6 +1,7 @@
 pub mod camera;
 pub mod instance;
 pub mod shapes;
+pub mod texture;
 
 use std::mem::size_of;
 use std::sync::Arc;
@@ -23,8 +24,7 @@ use crate::physics::{Planet, Position};
 use crate::render::camera::{Camera, Projection, OPENGL_TO_WGPU_MATRIX};
 use crate::render::instance::{Instance, InstanceRaw};
 use crate::render::shapes::octahedron;
-use crate::texture;
-use crate::texture::Texture;
+use crate::render::texture::Texture;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
